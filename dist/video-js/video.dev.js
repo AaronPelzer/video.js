@@ -2372,6 +2372,8 @@ vjs.Slider = vjs.Component.extend({
     this.bar = this.getChild(this.options_['barName']);
     this.handle = this.getChild(this.options_['handleName']);
 
+    player.on(this.playerEvent, vjs.bind(this, this.update));
+
     this.on('mousedown', this.onMouseDown);
     this.on('touchstart', this.onMouseDown);
     this.on('focus', this.onFocus);
@@ -2380,7 +2382,10 @@ vjs.Slider = vjs.Component.extend({
 
     this.player_.on('controlsvisible', vjs.bind(this, this.update));
 
-    player.on(this.playerEvent, vjs.bind(this, this.update));
+    // This is actually to fix the volume handle position. http://twitter.com/#!/gerritvanaaken/status/159046254519787520
+    // this.player_.one('timeupdate', vjs.bind(this, this.update));
+
+    player.ready(vjs.bind(this, this.update));
 
     this.boundEvents = {};
   }
@@ -2712,9 +2717,9 @@ vjs.MenuButton.prototype.createMenu = function(){
 
   // Add a title list item to the top
   if (this.options().title) {
-    menu.contentEl().appendChild(vjs.createEl('li', {
+    menu.el().appendChild(vjs.createEl('li', {
       className: 'vjs-menu-title',
-      innerHTML: vjs.capitalize(this.options().title),
+      innerHTML: vjs.capitalize(this.kind_),
       tabindex: -1
     }));
   }
@@ -2876,7 +2881,20 @@ vjs.Player = vjs.Component.extend({
     //   this.addClass('vjs-touch-enabled');
     // }
 
-    this.on('loadstart', this.onLoadStart);
+    // Firstplay event implimentation. Not sold on the event yet.
+    // Could probably just check currentTime==0?
+    this.one('play', function(e){
+      var fpEvent = { type: 'firstplay', target: this.el_ };
+      // Using vjs.trigger so we can check if default was prevented
+      var keepGoing = vjs.trigger(this.el_, fpEvent);
+
+      if (!keepGoing) {
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+      }
+    });
+
     this.on('ended', this.onEnded);
     this.on('play', this.onPlay);
     this.on('firstplay', this.onFirstPlay);
@@ -3121,16 +3139,14 @@ vjs.Player.prototype.manualProgressOn = function(){
   // In HTML5, some older versions don't support the progress event
   // So we're assuming they don't, and turning off manual progress if they do.
   // As opposed to doing user agent detection
-  if (this.tech) {
-    this.tech.one('progress', function(){
+  this.tech.one('progress', function(){
 
-      // Update known progress support for this playback technology
-      this.features['progressEvents'] = true;
+    // Update known progress support for this playback technology
+    this.features['progressEvents'] = true;
 
-      // Turn off manual progress tracking
-      this.player_.manualProgressOff();
-    });
-  }
+    // Turn off manual progress tracking
+    this.player_.manualProgressOff();
+  });
 };
 
 vjs.Player.prototype.manualProgressOff = function(){
@@ -3163,14 +3179,12 @@ vjs.Player.prototype.manualTimeUpdatesOn = function(){
   // timeupdate is also called by .currentTime whenever current time is set
 
   // Watch for native timeupdate event
-  if (this.tech) {
-    this.tech.one('timeupdate', function(){
-      // Update known progress support for this playback technology
-      this.features['timeupdateEvents'] = true;
-      // Turn off manual progress tracking
-      this.player_.manualTimeUpdatesOff();
-    });
-  }
+  this.tech.one('timeupdate', function(){
+    // Update known progress support for this playback technology
+    this.features['timeupdateEvents'] = true;
+    // Turn off manual progress tracking
+    this.player_.manualTimeUpdatesOff();
+  });
 };
 
 vjs.Player.prototype.manualTimeUpdatesOff = function(){
@@ -3188,13 +3202,8 @@ vjs.Player.prototype.trackCurrentTime = function(){
 };
 
 // Turn off play progress tracking (when paused or dragging)
-vjs.Player.prototype.stopTrackingCurrentTime = function(){
-  clearInterval(this.currentTimeInterval);
+vjs.Player.prototype.stopTrackingCurrentTime = function(){ clearInterval(this.currentTimeInterval); };
 
-  // #1002 - if the video ends right before the next timeupdate would happen,
-  // the progress bar won't make it all the way to the end
-  this.trigger('timeupdate');
-};
 // /* Player event handlers (how the player reacts to certain events)
 // ================================================================================ */
 
@@ -3202,27 +3211,7 @@ vjs.Player.prototype.stopTrackingCurrentTime = function(){
  * Fired when the user agent begins looking for media data
  * @event loadstart
  */
-vjs.Player.prototype.onLoadStart = function() {
-  // remove any first play listeners that weren't triggered from a previous video.
-  this.off('play', initFirstPlay);
-  this.one('play', initFirstPlay);
-
-  vjs.removeClass(this.el_, 'vjs-has-started');
-};
-
- // Need to create this outside the scope of onLoadStart so it
- // can be added and removed (to avoid piling first play listeners).
-function initFirstPlay(e) {
-  var fpEvent = { type: 'firstplay', target: this.el_ };
-  // Using vjs.trigger so we can check if default was prevented
-  var keepGoing = vjs.trigger(this.el_, fpEvent);
-
-  if (!keepGoing) {
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-  }
-}
+vjs.Player.prototype.onLoadStart;
 
 /**
  * Fired when the player has initial duration and dimension information
@@ -3320,16 +3309,7 @@ vjs.Player.prototype.onDurationChange = function(){
   // accidentally cause the stack to blow up.
   var duration = this.techGet('duration');
   if (duration) {
-    if (duration < 0) {
-      duration = Infinity;
-    }
     this.duration(duration);
-    // Determine if the stream is live and propagate styles down to UI.
-    if (duration === Infinity) {
-      this.addClass('vjs-live');
-    } else {
-      this.removeClass('vjs-live');
-    }
   }
 };
 
@@ -4122,23 +4102,13 @@ vjs.Player.prototype.userActive = function(bool){
 };
 
 vjs.Player.prototype.listenForUserActivity = function(){
-  var onActivity, onMouseMove, onMouseDown, mouseInProgress, onMouseUp,
-      activityCheck, inactivityTimeout, lastMoveX, lastMoveY;
+  var onMouseActivity, onMouseDown, mouseInProgress, onMouseUp,
+      activityCheck, inactivityTimeout;
 
-  onActivity = vjs.bind(this, this.reportUserActivity);
-
-  onMouseMove = function(e) {
-    // #1068 - Prevent mousemove spamming
-    // Chrome Bug: https://code.google.com/p/chromium/issues/detail?id=366970
-    if(e.screenX != lastMoveX || e.screenY != lastMoveY) {
-      lastMoveX = e.screenX;
-      lastMoveY = e.screenY;
-      onActivity();
-    }
-  };
+  onMouseActivity = vjs.bind(this, this.reportUserActivity);
 
   onMouseDown = function() {
-    onActivity();
+    onMouseActivity();
     // For as long as the they are touching the device or have their mouse down,
     // we consider them active even if they're not moving their finger or mouse.
     // So we want to continue to update that they are active
@@ -4146,24 +4116,24 @@ vjs.Player.prototype.listenForUserActivity = function(){
     // Setting userActivity=true now and setting the interval to the same time
     // as the activityCheck interval (250) should ensure we never miss the
     // next activityCheck
-    mouseInProgress = setInterval(onActivity, 250);
+    mouseInProgress = setInterval(onMouseActivity, 250);
   };
 
   onMouseUp = function(event) {
-    onActivity();
+    onMouseActivity();
     // Stop the interval that maintains activity if the mouse/touch is down
     clearInterval(mouseInProgress);
   };
 
   // Any mouse movement will be considered user activity
   this.on('mousedown', onMouseDown);
-  this.on('mousemove', onMouseMove);
+  this.on('mousemove', onMouseActivity);
   this.on('mouseup', onMouseUp);
 
   // Listen for keyboard navigation
   // Shouldn't need to use inProgress interval because of key repeat
-  this.on('keydown', onActivity);
-  this.on('keyup', onActivity);
+  this.on('keydown', onMouseActivity);
+  this.on('keyup', onMouseActivity);
 
   // Run an interval every 250 milliseconds instead of stuffing everything into
   // the mousemove/touchmove function itself, to prevent performance degradation.
@@ -4286,7 +4256,6 @@ vjs.ControlBar.prototype.options_ = {
     'timeDivider': {},
     'durationDisplay': {},
     'remainingTimeDisplay': {},
-    'liveDisplay': {},
     'progressControl': {},
     'fullscreenToggle': {},
     'volumeControl': {},
@@ -4299,34 +4268,6 @@ vjs.ControlBar.prototype.createEl = function(){
   return vjs.createEl('div', {
     className: 'vjs-control-bar'
   });
-};
-/**
- * Displays the live indicator
- * TODO - Future make it click to snap to live
- * @param {vjs.Player|Object} player
- * @param {Object=} options
- * @constructor
- */
-vjs.LiveDisplay = vjs.Component.extend({
-  init: function(player, options){
-    vjs.Component.call(this, player, options);
-  }
-});
-
-vjs.LiveDisplay.prototype.createEl = function(){
-  var el = vjs.Component.prototype.createEl.call(this, 'div', {
-    className: 'vjs-live-controls vjs-control'
-  });
-
-  this.contentEl_ = vjs.createEl('div', {
-    className: 'vjs-live-display',
-    innerHTML: '<span class="vjs-control-text">Stream Type </span>LIVE',
-    'aria-live': 'off'
-  });
-
-  el.appendChild(this.contentEl_);
-
-  return el;
 };
 /**
  * Button to toggle between play and pause
@@ -4790,6 +4731,7 @@ vjs.VolumeBar = vjs.Slider.extend({
     vjs.Slider.call(this, player, options);
     player.on('volumechange', vjs.bind(this, this.updateARIAAttributes));
     player.ready(vjs.bind(this, this.updateARIAAttributes));
+    setTimeout(vjs.bind(this, this.update), 0); // update when elements is in DOM
   }
 });
 
@@ -7026,6 +6968,7 @@ vjs.TextTrackMenuItem = vjs.MenuItem.extend({
     if(track.dflt()) {
         this.player_.showTextTrack(this.track.id_, this.track.kind());
     }
+        
   }
 });
 
@@ -7229,7 +7172,7 @@ vjs.ChaptersButton.prototype.createMenu = function(){
 
   var menu = this.menu = new vjs.Menu(this.player_);
 
-  menu.contentEl().appendChild(vjs.createEl('li', {
+  menu.el_.appendChild(vjs.createEl('li', {
     className: 'vjs-menu-title',
     innerHTML: vjs.capitalize(this.kind_),
     tabindex: -1
