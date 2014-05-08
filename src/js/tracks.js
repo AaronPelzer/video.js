@@ -979,8 +979,6 @@ vjs.ChaptersButton.prototype.createMenu = function(){
 
   /**
    * POPCORN FIX
-   *
-   * menu.el_.appendChild(vjs.createEl('li', {
    */
   menu.contentEl().appendChild(vjs.createEl('li', {
     className: 'vjs-menu-title',
@@ -1061,3 +1059,4 @@ vjs.obj.merge(vjs.ControlBar.prototype.options_['children'], {
 //     vjs.Component.call(this, player, options);
 //   }
 // });
+
