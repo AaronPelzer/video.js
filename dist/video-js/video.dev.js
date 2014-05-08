@@ -6968,7 +6968,6 @@ vjs.TextTrackMenuItem = vjs.MenuItem.extend({
     if(track.dflt()) {
         this.player_.showTextTrack(this.track.id_, this.track.kind());
     }
-        
   }
 });
 
@@ -7172,7 +7171,13 @@ vjs.ChaptersButton.prototype.createMenu = function(){
 
   var menu = this.menu = new vjs.Menu(this.player_);
 
-  menu.el_.appendChild(vjs.createEl('li', {
+
+  /**
+   * POPCORN FIX
+   *
+   * menu.el_.appendChild(vjs.createEl('li', {
+   */
+  menu.contentEl().appendChild(vjs.createEl('li', {
     className: 'vjs-menu-title',
     innerHTML: vjs.capitalize(this.kind_),
     tabindex: -1
@@ -7250,8 +7255,7 @@ vjs.obj.merge(vjs.ControlBar.prototype.options_['children'], {
 //   init: function(player, options){
 //     vjs.Component.call(this, player, options);
 //   }
-// });
-/**
+// });/**
  * @fileoverview Add JSON support
  * @suppress {undefinedVars}
  * (Compiler doesn't like JSON not being declared)

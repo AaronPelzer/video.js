@@ -745,6 +745,12 @@ vjs.TextTrackMenuItem = vjs.MenuItem.extend({
     vjs.MenuItem.call(this, player, options);
 
     this.player_.on(track.kind() + 'trackchange', vjs.bind(this, this.update));
+
+    // Popcorn Time Fix 
+    // Allowing us to send a default language
+    if(track.dflt()) {
+        this.player_.showTextTrack(this.track.id_, this.track.kind());
+    }
   }
 });
 
@@ -948,7 +954,13 @@ vjs.ChaptersButton.prototype.createMenu = function(){
 
   var menu = this.menu = new vjs.Menu(this.player_);
 
-  menu.el_.appendChild(vjs.createEl('li', {
+
+  /**
+   * POPCORN FIX
+   *
+   * menu.el_.appendChild(vjs.createEl('li', {
+   */
+  menu.contentEl().appendChild(vjs.createEl('li', {
     className: 'vjs-menu-title',
     innerHTML: vjs.capitalize(this.kind_),
     tabindex: -1

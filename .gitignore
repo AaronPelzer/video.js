@@ -25,3 +25,6 @@ test/*.conf.js
 
 *results.xml
 *.log
+
+dist/cdn
+dist/*.zip
