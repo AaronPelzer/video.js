@@ -303,6 +303,28 @@ vjs.TextTrack.prototype.mode = function(){
 };
 
 /**
+ * Offset is the amount of seconds the track will be ahead/behind
+ * @private
+ */
+vjs.Player.prototype.offset_;
+
+/**
+ * Get the subtitle offset (seconds)
+ * @return {Number}
+ */
+vjs.Player.prototype.offset = function(){
+  vjs.Player.prototype.offset_ = vjs.Player.prototype.offset_ || 0;
+  return this.offset_;
+};
+
+/**
+ * Set the subtitle offset (seconds)
+ */
+vjs.Player.prototype.setOffset = function(secs){
+  vjs.Player.prototype.offset_ = secs;
+};
+
+/**
  * Change the font size of the text track to make it larger when playing in fullscreen mode
  * and restore it to its normal size when not in fullscreen mode.
  */
@@ -546,7 +568,7 @@ vjs.TextTrack.prototype.update = function(){
   if (this.cues_.length > 0) {
 
     // Get curent player time
-    var time = this.player_.currentTime();
+    var time = this.player_.currentTime() + vjs.Player.prototype.offset(); //Add offset to player time
 
     // Check if the new time is outside the time box created by the the last update.
     if (this.prevChange === undefined || time < this.prevChange || this.nextChange <= time) {
