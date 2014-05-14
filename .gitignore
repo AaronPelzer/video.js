@@ -28,3 +28,4 @@ test/*.conf.js
 
 dist/cdn
 dist/*.zip
+sandbox/index.html.example
