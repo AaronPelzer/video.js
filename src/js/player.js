@@ -58,6 +58,20 @@ vjs.Player = vjs.Component.extend({
     // see enableTouchActivity in Component
     options.reportTouchActivity = false;
 
+    // Make sure the event listeners are the first things to happen when
+    // the player is ready. See #1208
+    // If not, the tech might fire events before the listeners are attached.
+    this.ready(function(){
+      this.on('loadstart', this.onLoadStart);
+      this.on('ended', this.onEnded);
+      this.on('play', this.onPlay);
+      this.on('firstplay', this.onFirstPlay);
+      this.on('pause', this.onPause);
+      this.on('progress', this.onProgress);
+      this.on('durationchange', this.onDurationChange);
+      this.on('fullscreenchange', this.onFullscreenChange);
+    });
+
     // Run base component initializing with new options.
     // Builds the element through createEl()
     // Inits and embeds any child components in opts
@@ -76,28 +90,6 @@ vjs.Player = vjs.Component.extend({
     // if (vjs.TOUCH_ENABLED) {
     //   this.addClass('vjs-touch-enabled');
     // }
-
-    // Firstplay event implimentation. Not sold on the event yet.
-    // Could probably just check currentTime==0?
-    this.one('play', function(e){
-      var fpEvent = { type: 'firstplay', target: this.el_ };
-      // Using vjs.trigger so we can check if default was prevented
-      var keepGoing = vjs.trigger(this.el_, fpEvent);
-
-      if (!keepGoing) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    });
-
-    this.on('ended', this.onEnded);
-    this.on('play', this.onPlay);
-    this.on('firstplay', this.onFirstPlay);
-    this.on('pause', this.onPause);
-    this.on('progress', this.onProgress);
-    this.on('durationchange', this.onDurationChange);
-    this.on('fullscreenchange', this.onFullscreenChange);
 
     // Make player easily findable by ID
     vjs.players[this.id_] = this;
@@ -621,14 +613,7 @@ vjs.Player.prototype.techGet = function(method){
  * @return {vjs.Player} self
  */
 vjs.Player.prototype.play = function(){
-  // In the case of an error, trying to play again wont fix the issue
-  // so we're blocking calling play in this case.
-  // We might log an error when this happpens, but this is probably too chatty.
-  // vjs.log.error('The error must be resolved before attempting to play the video');
-  if (!this.error()) {
-    this.techCall('play');
-  }
-
+  this.techCall('play');
   return this;
 };
 
